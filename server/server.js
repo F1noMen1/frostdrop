@@ -10,7 +10,7 @@ const ADMIN_EMAIL=String(process.env.ADMIN_EMAIL||LOCALCFG.adminEmail||'').trim(
 
 // ---------- storage
 const UP_URL=process.env.UPSTASH_REDIS_REST_URL||LOCALCFG.upstashUrl,UP_TOK=process.env.UPSTASH_REDIS_REST_TOKEN||LOCALCFG.upstashToken;
-const store=UP_URL?{
+const store=(UP_URL&&UP_TOK)?{
   kind:'upstash',
   async cmd(a){const r=await fetch(UP_URL,{method:'POST',headers:{Authorization:'Bearer '+UP_TOK,'Content-Type':'application/json'},body:JSON.stringify(a)});const j=await r.json();if(j.error)throw new Error(j.error);return j.result;},
   async get(k){const v=await this.cmd(['GET',k]);return v==null?null:JSON.parse(v);},
