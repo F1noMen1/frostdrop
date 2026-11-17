@@ -1,0 +1,8 @@
+{
+  "name": "frostdrop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FrostDrop — CS2 case opening simulator with friends",
+  "scripts": { "start": "node server/server.js" },
+  "engines": { "node": ">=18" }
+}
