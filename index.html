@@ -503,6 +503,15 @@ body.glass .panel,body.glass .ccard,body.glass .icard{background:rgba(var(--p1),
 .auth-seg{margin-bottom:16px}.auth-ava{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.auth-ava .av{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:20px!important}.auth-ava .swatches{flex:1}.auth-ava .sw{width:24px;height:24px;border-radius:8px}
 .auth-err{min-height:20px;color:var(--red);font-weight:700;font-size:13px;margin:4px 0 10px}
 .auth-foot{margin-top:16px;text-align:center;color:var(--muted);font-size:12px;line-height:1.5}
+.ulist{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto}
+.urow{display:grid;grid-template-columns:auto minmax(150px,1.2fr) minmax(110px,.8fr) auto;gap:14px;align-items:center;padding:10px 12px;border-radius:14px;background:var(--s1);border:1px solid var(--line)}
+.urow.tgt{border-color:var(--gold);box-shadow:0 0 0 1px rgba(255,201,60,.4)}
+.uav{position:relative}.uav .av{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-size:16px!important}.uav i{position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border-radius:50%;background:#55606f;border:2px solid var(--s1)}.uav i.on{background:var(--green);box-shadow:0 0 8px var(--green)}
+.uname b{display:flex;align-items:center;gap:6px;font-size:14px}.uname span{font-size:12px;color:var(--muted)}
+.role{font-size:10px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(var(--a1),.15);color:var(--ice2)}.role.own{background:rgba(255,201,60,.18);color:var(--gold)}
+.ustat b{display:block;font-family:var(--hf);font-size:14px}.ustat span{font-size:11px;color:var(--muted)}
+.uacts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;align-items:center}.uacts .btn{padding:9px 12px;font-size:12px}.uacts .inp input{padding:8px 0}
+@media (max-width:1000px){.urow{grid-template-columns:auto 1fr}.ustat{grid-column:2}.uacts{grid-column:1/-1;justify-content:flex-start}}
 footer{padding:24px;text-align:center;color:#4f6280;font-size:12px;border-top:1px solid var(--line)}
 
 @media (max-width:1200px){.up-grid{grid-template-columns:1fr 1fr}.up-center{grid-column:1/-1;order:-1}.adm-grid{grid-template-columns:1fr}}
@@ -1437,11 +1446,14 @@ function renderInventory(){
 }
 
 /* ================= ADMIN ================= */
-const ad={q:'',rar:'all',qty:1,reset:0};
+const ad={q:'',rar:'all',qty:1,reset:0,target:'me',users:[],uq:''};
 renderers.admin=renderAdmin;
 function renderAdmin(){
   const el=$('#page-admin');const L=state.luck;
-  el.innerHTML=`<div class="adm-warn">${I('wrench')} Админ-панель. Здесь можно выдавать предметы, менять баланс и подкручивать шансы. Все изменения сохраняются автоматически.</div>
+  const usersHTML=NET.server&&NET.user?`<div class="panel pad snowcap" style="margin-bottom:16px"><div class="ph">${I('user')} Игроки сервера <span id="adUc"></span></div>
+    <div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap"><input class="search" id="adUq" placeholder="Поиск по нику или почте…" value="${esc(ad.uq)}" style="flex:1;min-width:220px;margin:0"><button class="btn ghost" id="adUr">Обновить</button></div>
+    <div id="adUsers" class="ulist"><div class="empty" style="padding:20px">Загрузка…</div></div></div>`:'';
+  el.innerHTML=usersHTML+`<div class="adm-warn">${I('wrench')} Админ-панель. Здесь можно выдавать предметы, менять баланс и подкручивать шансы. Все изменения сохраняются автоматически.</div>
   <div class="adm-grid"><div class="adm-col">
     <div class="panel pad snowcap"><div class="ph">${I('coins')} Баланс</div><div class="big-bal">${money(state.balance)}</div>
       <div class="field"><label>Сумма</label><div class="inp"><input id="adAmt" type="number" min="0" step="1" value="1000"><span>$</span></div></div>
@@ -1456,7 +1468,7 @@ function renderAdmin(){
       <div class="crinfo" style="margin:0 0 12px">Кейсов: <b>${state.stats.opened}</b> · Апгрейдов: <b>${state.stats.upgrades}</b> (успешно ${state.stats.upWins}) · Краш-игр: <b>${state.stats.crash}</b> · Лесенка: <b>${state.stats.tower}</b> · Баттлов: <b>${state.stats.battles}</b> (побед ${state.stats.battleWins})</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn ghost" id="adClrInv">Очистить инвентарь</button><button class="btn red" id="adReset">${ad.reset?'Точно? Нажми ещё раз':'Сбросить всё'}</button></div></div>
   </div>
-  <div class="panel pad snowcap"><div class="ph">${I('gift')} Выдать предмет <span>клик по предмету — сразу в инвентарь</span></div>
+  <div class="panel pad snowcap"><div class="ph">${I('gift')} Выдать предмет <span id="adTgt">Кому: <b>мне</b></span></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px"><input class="search" id="adQ" placeholder="Поиск по базе: Karambit, Dragon Lore…" value="${esc(ad.q)}" style="flex:1;min-width:200px;margin:0">
     <div class="inp" style="width:130px"><span style="margin-right:6px">×</span><input id="adQty" type="number" min="1" max="50" value="${ad.qty}"></div>
     <button class="btn gold" id="adRndKnife">${I('dice')} Случайный нож</button></div>
@@ -1475,12 +1487,37 @@ function renderAdmin(){
   $$('#adR .chip').forEach(b=>b.onclick=()=>{ad.rar=b.dataset.k;Snd.click();$$('#adR .chip').forEach(x=>x.classList.toggle('on',x===b));drawAdG();});
   $('#adRndKnife').onclick=()=>{const ks=ITEMS.filter(i=>i.rar==='gold');const k=ks[Math.floor(Math.random()*ks.length)];const us=addItems([k.id]);Snd.win('gold');showDrops(us,{title:'ВЫДАНО АДМИНОМ'});};
   drawAdG();
+  if(usersHTML){$('#adUq').oninput=e=>{ad.uq=e.target.value;drawUsers();};$('#adUr').onclick=loadUsers;loadUsers();}
 }
+async function loadUsers(){const r=await api('/api/admin',{token:NET.token,op:'users'});if(!r.ok){const b=$('#adUsers');if(b)b.innerHTML=`<div class="empty">${esc(r.err||'Ошибка')}</div>`;return;}ad.users=r.users;drawUsers();}
+function drawUsers(){const box=$('#adUsers');if(!box)return;const q=ad.uq.trim().toLowerCase();
+  const L=ad.users.filter(u=>!q||u.nick.toLowerCase().includes(q)||u.email.toLowerCase().includes(q));
+  $('#adUc').textContent=`${ad.users.length} всего · ${ad.users.filter(u=>u.online).length} онлайн`;
+  box.innerHTML=L.length?L.map(u=>`<div class="urow ${ad.target===u.id?'tgt':''}">
+    <div class="uav">${av(u.nick,u.ava,false,u.img)}<i class="${u.online?'on':''}"></i></div>
+    <div class="uname"><b>${esc(u.nick)}${u.owner?'<span class="role own">владелец</span>':u.admin?'<span class="role">админ</span>':''}</b><span>${esc(u.email)}</span></div>
+    <div class="ustat"><b>${money(u.balance)}</b><span>${u.items} предм. · удача ×${(+u.luck).toFixed(1)}</span></div>
+    <div class="uacts">
+      <div class="inp" style="width:110px"><input type="number" min="-1000000" step="1" value="10" data-amt="${u.id}"><span>$</span></div>
+      <button class="btn green" data-give="${u.id}">Начислить</button>
+      <select class="sel" data-luck="${u.id}" title="Удача игрока"><option value="">Удача…</option><option value="0.5">×0.5 сливать</option><option value="1">×1 честно</option><option value="2.5">×2.5 стример</option><option value="5">×5 максимум</option></select>
+      <button class="btn ${ad.target===u.id?'gold':'ghost'}" data-tgt="${u.id}">${ad.target===u.id?'Выдаём предметы ✓':'Выдать предметы'}</button>
+      ${NET.user.owner&&!u.owner?`<button class="btn ${u.admin?'red':'ghost'}" data-adm="${u.id}" data-v="${u.admin?0:1}">${u.admin?'Снять админку':'Дать админку'}</button>`:''}
+    </div></div>`).join(''):'<div class="empty" style="padding:20px">Никого не найдено</div>';
+  $$('#adUsers [data-give]').forEach(b=>b.onclick=async()=>{const id=b.dataset.give;const v=+$(`#adUsers [data-amt="${id}"]`).value||0;if(!v)return;await adminGrant(id,{balance:v});});
+  $$('#adUsers [data-luck]').forEach(s=>s.onchange=async()=>{if(!s.value)return;await adminGrant(s.dataset.luck,{luck:+s.value});});
+  $$('#adUsers [data-tgt]').forEach(b=>b.onclick=()=>{ad.target=ad.target===b.dataset.tgt?'me':b.dataset.tgt;drawUsers();adTgtLabel();$('#adG').scrollIntoView({behavior:'smooth',block:'start'});});
+  $$('#adUsers [data-adm]').forEach(b=>b.onclick=async()=>{const r=await api('/api/admin',{token:NET.token,op:'setadmin',id:b.dataset.adm,admin:b.dataset.v==='1'});if(r.ok){toast(b.dataset.v==='1'?'Админка выдана':'Админка снята','ok');loadUsers();}else toast(r.err,'err');});
+  adTgtLabel();}
+function adTgtLabel(){const el=$('#adTgt');if(!el)return;const u=ad.users.find(x=>x.id===ad.target);el.innerHTML=u?`Кому: <b>${esc(u.nick)}</b> <button class="btn ghost" id="adTgtX" style="padding:4px 10px;font-size:12px">мне</button>`:'Кому: <b>мне</b>';const x=$('#adTgtX');if(x)x.onclick=()=>{ad.target='me';drawUsers();};}
+async function adminGrant(id,g){const u=ad.users.find(x=>x.id===id);if(u&&u.id===NET.cid){if(g.balance)addBal(g.balance);if(g.items)addItems(g.items);if(g.luck!=null){state.luck=g.luck;save();}toast('Выдано себе','ok');renderAdmin();return;}
+  const r=await api('/api/admin',{token:NET.token,op:'grant',id,...g});
+  if(r.ok){Snd.coin();toast(`${u?esc(u.nick):'Игрок'}: ${g.balance?(g.balance>0?'+':'')+money(g.balance)+' ':''}${g.items?g.items.length+' предм. ':''}${g.luck!=null?'удача ×'+g.luck:''}${r.live?' — получил сразу':' — получит при входе'}`,'gold');setTimeout(loadUsers,400);}else toast(r.err||'Ошибка','err');}
 function drawAdG(){
   const q=ad.q.trim().toLowerCase();
   const all=ITEMS.filter(i=>(ad.rar==='all'||i.rar===ad.rar)&&(!q||(i.weapon+' '+i.skin).toLowerCase().includes(q))).sort((a,b)=>b.price-a.price);const list=all.slice(0,160);
   $('#adG').innerHTML=(all.length>160?`<div class="empty" style="grid-column:1/-1;padding:10px">Найдено ${all.length} — показаны 160 самых дорогих. Уточни поиск.</div>`:'')+list.map(i=>itemCard(i,{attrs:`data-id="${i.id}"`})).join('')||'<div class="empty">Ничего не найдено</div>';
-  $$('#adG .icard').forEach(c=>c.onclick=()=>{const it=ITEM[c.dataset.id];addItems(Array(ad.qty).fill(it.id));Snd.ping();toast(`Выдано: ${esc(it.weapon)} | ${esc(it.skin)}${ad.qty>1?' ×'+ad.qty:''}`,'gold');c.classList.add('sel');setTimeout(()=>c.classList.remove('sel'),400);});
+  $$('#adG .icard').forEach(c=>c.onclick=()=>{const it=ITEM[c.dataset.id];if(ad.target!=='me'){adminGrant(ad.target,{items:Array(ad.qty).fill(it.id)});c.classList.add('sel');setTimeout(()=>c.classList.remove('sel'),400);return;}addItems(Array(ad.qty).fill(it.id));Snd.ping();toast(`Выдано: ${esc(it.weapon)} | ${esc(it.skin)}${ad.qty>1?' ×'+ad.qty:''}`,'gold');c.classList.add('sel');setTimeout(()=>c.classList.remove('sel'),400);});
 }
 
 /* ================= header / bonus ================= */
@@ -1705,6 +1742,10 @@ function netMsg(m){
     case 'cbets':if(m.round===cr.round){cr.netBets=m.bets;netApplyOuts();renderCrPlayers();}break;
     case 'lobbies':NET.lobbies=m.list;if(cur==='battles'&&bt.view==='lobby')drawNetLobbies();break;
     case 'battle':{const L=m.lobby;const mine=L.players.some(p=>p.cid===NET.cid);if(mine&&!bt.running){toast('Баттл начинается!','gold');bt.players_=null;go('battles');startBattle(L);}break;}
+    case 'grant':{if(m.balance)addBal(m.balance);if(m.items&&m.items.length){addItems(m.items);onInv();}if(m.luck!=null){state.luck=m.luck;save();}
+      const parts=[];if(m.balance)parts.push((m.balance>0?'+':'')+money(m.balance));if(m.items&&m.items.length)parts.push(m.items.length===1?`${ITEM[m.items[0]].weapon} | ${ITEM[m.items[0]].skin}`:`${m.items.length} предметов`);
+      if(parts.length){toast(`${I('gift')} Администратор ${esc(m.from)} выдал: ${esc(parts.join(', '))}`,'gold');Snd.win('gold');}saveNow();break;}
+    case 'role':NET.user=m.user;$('.tab[data-p="admin"]').hidden=!isAdmin();$('#balAdd').hidden=!isAdmin();toast(m.user.admin?'Тебе выдали админку!':'Админку сняли',m.user.admin?'gold':'');if(cur==='admin'&&!isAdmin())go('cases');break;
     case 'bclosed':if((m.refund||[]).includes(NET.cid)){addBal(m.cost);toast(`Лобби закрыто — возвращено ${money(m.cost)}`,'ok');}break;
   }
 }

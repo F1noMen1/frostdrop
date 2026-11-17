@@ -45,7 +45,10 @@ async function userById(id){if(users.has(id))return users.get(id);const em=await
 const sessCache=new Map();
 async function userByToken(tok){if(!/^[a-f0-9]{48}$/.test(String(tok||'')))return null;let id=sessCache.get(tok);if(!id){id=await store.get('sess:'+tok);if(!id)return null;sessCache.set(tok,id);}return userById(id);}
 async function newSession(u){const tok=crypto.randomBytes(24).toString('hex');await store.set('sess:'+tok,u.id);sessCache.set(tok,u.id);return tok;}
-function pubUser(u){return {id:u.id,email:u.email,nick:u.nick,ava:u.ava,img:u.imgv?`/api/ava/${u.id}?v=${u.imgv}`:'',admin:!!(ADMIN_EMAIL&&u.email===ADMIN_EMAIL)};}
+const isOwner=u=>!!(ADMIN_EMAIL&&u.email===ADMIN_EMAIL);
+const isAdm=u=>isOwner(u)||!!u.admin;
+function pubUser(u){return {id:u.id,email:u.email,nick:u.nick,ava:u.ava,img:u.imgv?`/api/ava/${u.id}?v=${u.imgv}`:'',admin:isAdm(u),owner:isOwner(u)};}
+async function addToList(id){const l=(await store.get('userlist'))||[];if(!l.includes(id)){l.push(id);await store.set('userlist',l);}}
 const loginRate=new Map();
 function tooMany(ip){const n=Date.now();const a=(loginRate.get(ip)||[]).filter(t=>n-t<60000);a.push(n);loginRate.set(ip,a);return a.length>8;}
 function validImg(img){return typeof img==='string'&&/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(img)&&img.length<=150000;}
@@ -123,16 +126,33 @@ async function api(route,m,ip){
       const nick=clean(m.nick,16)||clean(email.split('@')[0],16)||'Игрок';const salt=crypto.randomBytes(16).toString('hex');
       const u={id:crypto.randomBytes(8).toString('hex'),email,nick,ava:/^#[0-9a-f]{6}$/i.test(m.ava)?m.ava:'#ffc93c',salt,hash:hashPw(m.password,salt),created:Date.now(),imgv:0};
       if(m.img){try{await setAvatar(u,m.img);}catch(e){}}
-      await saveUser(u);const token=await newSession(u);return {ok:1,token,me:{user:pubUser(u),state:null}};}
+      await saveUser(u);await addToList(u.id);const token=await newSession(u);return {ok:1,token,me:{user:pubUser(u),state:null}};}
     case 'login':{if(tooMany(ip))return {err:'Слишком много попыток, подожди минуту'};
       const email=String(m.email||'').trim().toLowerCase();const u=await userByEmail(email);
       if(!u||!crypto.timingSafeEqual(Buffer.from(hashPw(m.password||'',u.salt),'hex'),Buffer.from(u.hash,'hex')))return {err:'Неверная почта или пароль'};
-      users.set(u.id,u);const token=await newSession(u);return {ok:1,token,me:{user:pubUser(u),state:await store.get('state:'+u.id)}};}
+      users.set(u.id,u);await addToList(u.id);const token=await newSession(u);return {ok:1,token,me:{user:pubUser(u),state:await store.get('state:'+u.id)}};}
     case 'me':{const u=await userByToken(m.token);if(!u)return {err:'auth'};return {ok:1,user:pubUser(u),state:await store.get('state:'+u.id)};}
     case 'save':{const u=await userByToken(m.token);if(!u)return {err:'auth'};const s=m.state;if(!s||typeof s.balance!=='number'||!Array.isArray(s.inv))return {err:'bad'};await store.set('state:'+u.id,s);return {ok:1};}
     case 'profile':{const u=await userByToken(m.token);if(!u)return {err:'auth'};if(m.nick!==undefined)u.nick=clean(m.nick,16)||u.nick;if(/^#[0-9a-f]{6}$/i.test(m.ava||''))u.ava=m.ava;
       if(m.img!==undefined){try{await setAvatar(u,m.img);}catch(e){return {err:e.message};}}
       await saveUser(u);const c=clients.get(u.id);if(c)c.u=u;bOnline();return {ok:1,user:pubUser(u)};}
+    case 'admin':{const me=await userByToken(m.token);if(!me||!isAdm(me))return {err:'Нет прав'};
+      if(m.op==='users'){const ids=(await store.get('userlist'))||[];const out=[];
+        for(const id of ids){const u=await userById(id);if(!u)continue;const s=await store.get('state:'+id);
+          out.push({...pubUser(u),online:clients.has(id),balance:s?s.balance:3,items:s&&s.inv?s.inv.length:0,luck:s&&s.luck||1,created:u.created});}
+        out.sort((a,b)=>(b.online-a.online)||(b.created-a.created));return {ok:1,users:out};}
+      const u=await userById(String(m.id||''));if(!u)return {err:'Игрок не найден'};
+      if(m.op==='setadmin'){if(!isOwner(me))return {err:'Выдавать админку может только владелец'};if(isOwner(u))return {err:'Владельца нельзя изменить'};
+        u.admin=!!m.admin;await saveUser(u);const c=clients.get(u.id);if(c){c.u=u;for(const r of c.streams)write(r,{t:'role',user:pubUser(u)});}return {ok:1};}
+      if(m.op==='grant'){const bal=Math.round((+m.balance||0)*100)/100;const items=(Array.isArray(m.items)?m.items:[]).filter(id=>ITEM[id]).slice(0,100);
+        const luck=m.luck!=null?Math.max(.3,Math.min(5,+m.luck||1)):null;if(!bal&&!items.length&&luck==null)return {err:'Нечего выдавать'};
+        const g={t:'grant',balance:bal,items,luck,from:me.nick};const c=clients.get(u.id);
+        if(c&&c.streams.size){for(const r of c.streams)write(r,g);return {ok:1,live:1};}
+        const s=(await store.get('state:'+u.id))||{balance:3,inv:[],uid:0,set:{},stats:{}};
+        s.balance=Math.max(0,Math.round(((s.balance||0)+bal)*100)/100);s.inv=s.inv||[];s.uid=s.uid||0;
+        for(const id of items){s.uid++;s.inv.push({u:s.uid,id,f:+(Math.random()*.4).toFixed(6),t:Date.now()});}
+        if(luck!=null)s.luck=luck;await store.set('state:'+u.id,s);return {ok:1,live:0};}
+      return {err:'unknown op'};}
     case 'logout':{if(/^[a-f0-9]{48}$/.test(String(m.token||''))){sessCache.delete(m.token);await store.del('sess:'+m.token);}return {ok:1};}
   }
   return {err:'unknown'};
@@ -150,7 +170,7 @@ const server=http.createServer(async(req,res)=>{
   const u=new URL(req.url,'http://x');const ip=(req.headers['x-forwarded-for']||req.socket.remoteAddress||'').split(',')[0].trim();
   try{
   if(u.pathname==='/api/hello')return json(res,{frostdrop:2,now:Date.now()});
-  const am=u.pathname.match(/^\/api\/(register|login|me|save|profile|logout)$/);
+  const am=u.pathname.match(/^\/api\/(register|login|me|save|profile|logout|admin)$/);
   if(am&&req.method==='POST'){const m=await readBody(req,am[1]==='save'?2e6:300000);return json(res,await api(am[1],m,ip));}
   const av=u.pathname.match(/^\/api\/ava\/([a-f0-9]{16})$/);
   if(av){const d=await store.get('ava:'+av[1]);if(!d){res.writeHead(404);return res.end();}const mm=d.match(/^data:(image\/\w+);base64,(.*)$/);res.writeHead(200,{'Content-Type':mm[1],'Cache-Control':'public, max-age=31536000, immutable'});return res.end(Buffer.from(mm[2],'base64'));}
